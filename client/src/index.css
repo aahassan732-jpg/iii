@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+:root { font-family: "Cairo", ui-sans-serif, system-ui, sans-serif; color: #201a2d; background: #fbfaff; font-synthesis: none; text-rendering: optimizeLegibility; }
+* { box-sizing: border-box; }
+html { direction: rtl; scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: #fbfaff; }
+button, input { font: inherit; }
+button { transition: transform 160ms cubic-bezier(.23,1,.32,1), box-shadow 160ms ease, background-color 160ms ease; }
+button:active { transform: scale(.97); }
+::selection { background: #e4d8ff; color: #37274c; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }

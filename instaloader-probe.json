@@ -1,0 +1,33 @@
+{
+  "checked_at": "2026-09-19T15:34:12.214118+00:00",
+  "instaloader_version": "4.15.3",
+  "username": "instagram",
+  "ok": false,
+  "error_type": "ConnectionException",
+  "error": "JSON Query to api/v1/users/web_profile_info/: 429 Too Many Requests when accessing https://www.instagram.com/api/v1/users/web_profile_info/?username=instagram",
+  "response_ms": 119499.76
+}
+{
+  "case_matrix": [
+    {
+      "case": "username_not_found",
+      "expected": "ProfileNotExistsException"
+    },
+    {
+      "case": "private_account",
+      "expected": "is_private=True; public fields may still be available"
+    },
+    {
+      "case": "rate_limit_or_block",
+      "expected": "TooManyRequestsException / LoginRequiredException / ConnectionException"
+    },
+    {
+      "case": "network_error",
+      "expected": "ConnectionException"
+    },
+    {
+      "case": "missing_or_changed_fields",
+      "expected": "provider maps optional fields to null and records provider error"
+    }
+  ]
+}
