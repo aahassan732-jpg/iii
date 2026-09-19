@@ -1,3 +1,8 @@
+CREATE TYPE "public"."activation_plan" AS ENUM('PRO', 'BUSINESS');--> statement-breakpoint
+CREATE TYPE "public"."activation_status" AS ENUM('UNUSED', 'ACTIVE', 'EXPIRED', 'REVOKED');--> statement-breakpoint
+CREATE TYPE "public"."subscription_plan" AS ENUM('FREE', 'PRO', 'BUSINESS');--> statement-breakpoint
+CREATE TYPE "public"."subscription_status" AS ENUM('ACTIVE', 'EXPIRED', 'CANCELLED');--> statement-breakpoint
+CREATE TYPE "public"."user_role" AS ENUM('user', 'admin');--> statement-breakpoint
 CREATE TABLE "activation_codes" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"codeHash" varchar(128) NOT NULL,

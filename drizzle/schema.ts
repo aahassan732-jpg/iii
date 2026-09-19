@@ -1,10 +1,10 @@
 import { boolean, index, integer, pgEnum, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
-const userRole = pgEnum("user_role", ["user", "admin"]);
-const activationPlan = pgEnum("activation_plan", ["PRO", "BUSINESS"]);
-const subscriptionPlan = pgEnum("subscription_plan", ["FREE", "PRO", "BUSINESS"]);
-const subscriptionStatus = pgEnum("subscription_status", ["ACTIVE", "EXPIRED", "CANCELLED"]);
-const activationStatus = pgEnum("activation_status", ["UNUSED", "ACTIVE", "EXPIRED", "REVOKED"]);
+export const userRole = pgEnum("user_role", ["user", "admin"]);
+export const activationPlan = pgEnum("activation_plan", ["PRO", "BUSINESS"]);
+export const subscriptionPlan = pgEnum("subscription_plan", ["FREE", "PRO", "BUSINESS"]);
+export const subscriptionStatus = pgEnum("subscription_status", ["ACTIVE", "EXPIRED", "CANCELLED"]);
+export const activationStatus = pgEnum("activation_status", ["UNUSED", "ACTIVE", "EXPIRED", "REVOKED"]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),

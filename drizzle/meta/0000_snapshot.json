@@ -1,5 +1,5 @@
 {
-  "id": "9070bbd2-7942-4c40-a0a5-d1c922569b90",
+  "id": "dec985a0-231c-42b1-886e-8b14cf88e1c7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1113,7 +1113,52 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.activation_plan": {
+      "name": "activation_plan",
+      "schema": "public",
+      "values": [
+        "PRO",
+        "BUSINESS"
+      ]
+    },
+    "public.activation_status": {
+      "name": "activation_status",
+      "schema": "public",
+      "values": [
+        "UNUSED",
+        "ACTIVE",
+        "EXPIRED",
+        "REVOKED"
+      ]
+    },
+    "public.subscription_plan": {
+      "name": "subscription_plan",
+      "schema": "public",
+      "values": [
+        "FREE",
+        "PRO",
+        "BUSINESS"
+      ]
+    },
+    "public.subscription_status": {
+      "name": "subscription_status",
+      "schema": "public",
+      "values": [
+        "ACTIVE",
+        "EXPIRED",
+        "CANCELLED"
+      ]
+    },
+    "public.user_role": {
+      "name": "user_role",
+      "schema": "public",
+      "values": [
+        "user",
+        "admin"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},
