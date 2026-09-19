@@ -4,7 +4,7 @@
 
 ## الحالة الحالية
 
-تم بناء تطبيق Web full-stack يعمل على قالب React + Vite + Tailwind + Express + tRPC + Drizzle + قاعدة بيانات مُدارة ومصادقة Manus OAuth. تم اختبار Instaloader 4.15.3 فعليًا، وأعاد Instagram `429 Too Many Requests`؛ لذلك لا يفترض التطبيق نجاح المصدر دائمًا، ولا يعرض بيانات وهمية في الإنتاج.
+تم بناء تطبيق Web full-stack يعمل على قالب React + Vite + Tailwind + Express + tRPC + Drizzle + قاعدة بيانات PostgreSQL مُدارة ومصادقة Supabase Auth. تم اختبار Instaloader 4.15.3 فعليًا، وأعاد Instagram `429 Too Many Requests`؛ لذلك لا يفترض التطبيق نجاح المصدر دائمًا، ولا يعرض بيانات وهمية في الإنتاج.
 
 ## التشغيل المحلي
 
@@ -23,6 +23,10 @@ pnpm dev
 راجع [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md). أهم المتغيرات الخاصة بالمشروع:
 
 ```text
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 INSTAGRAM_PROVIDER=instaloader
 INSTAGRAM_WORKER_URL=https://worker.example.com
 MONITOR_CRON_SECRET=change-me
@@ -31,6 +35,10 @@ TELEGRAM_URL=
 ```
 
 استخدم `INSTAGRAM_PROVIDER=mock` فقط في التطوير المحلي. لا يتم السماح بالـ MockProvider في الإنتاج.
+
+## المصادقة
+
+يعتمد تسجيل الدخول على Supabase Auth بالكامل. تدعم صفحة `/login` إنشاء الحساب وتسجيل الدخول واستعادة كلمة المرور. يجب إضافة متغيرات `SUPABASE_URL` و`SUPABASE_PUBLISHABLE_KEY` للخادم، ونسخ `VITE_SUPABASE_URL` و`VITE_SUPABASE_PUBLISHABLE_KEY` للواجهة قبل البناء. لم يعد المشروع يعتمد على Manus OAuth.
 
 ## قاعدة البيانات
 

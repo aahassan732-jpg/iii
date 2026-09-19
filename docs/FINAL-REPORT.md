@@ -10,7 +10,7 @@
 
 الواجهة: React 19 وVite وTypeScript وTailwind CSS وshadcn/ui وLucide وReact Hook Form-compatible components وZod وtRPC.
 
-الخادم: Express وtRPC وDrizzle وManus OAuth وقاعدة البيانات المُدارة في بيئة WebDev.
+الخادم: Express وtRPC وDrizzle وSupabase Auth وقاعدة البيانات المُدارة في Supabase.
 
 العامل: Python 3.12 وFlask وInstaloader 4.15.3، مستقل عن عملية Node.
 

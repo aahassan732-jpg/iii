@@ -14,7 +14,8 @@ import Activate from "./pages/Activate";
 import Info from "./pages/Info";
 import Report from "./pages/Report";
 import Admin from "./pages/Admin";
+import Login from "./pages/Login";
 import SiteShell from "./components/SiteShell";
 
-function Router() { return <Switch><Route path="/" component={Home} /><Route path="/search" component={Search} /><Route path="/profile/:username" component={Profile} /><Route path="/report/:username" component={Report} /><Route path="/dashboard" component={Dashboard} /><Route path="/compare" component={Compare} /><Route path="/pricing" component={Pricing} /><Route path="/activate" component={Activate} /><Route path="/admin" component={Admin} /><Route path="/about" component={Info} /><Route path="/privacy" component={Info} /><Route path="/terms" component={Info} /><Route path="/404" component={NotFound} /><Route component={NotFound} /></Switch>; }
+function Router() { return <Switch><Route path="/" component={Home} /><Route path="/login" component={Login} /><Route path="/search" component={Search} /><Route path="/profile/:username" component={Profile} /><Route path="/report/:username" component={Report} /><Route path="/dashboard" component={Dashboard} /><Route path="/compare" component={Compare} /><Route path="/pricing" component={Pricing} /><Route path="/activate" component={Activate} /><Route path="/admin" component={Admin} /><Route path="/about" component={Info} /><Route path="/privacy" component={Info} /><Route path="/terms" component={Info} /><Route path="/404" component={NotFound} /><Route component={NotFound} /></Switch>; }
 export default function App() { return <ErrorBoundary><ThemeProvider defaultTheme="light"><TooltipProvider><Toaster /><SiteShell><Router /></SiteShell></TooltipProvider></ThemeProvider></ErrorBoundary>; }
