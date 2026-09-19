@@ -54,7 +54,7 @@ export class InstaloaderProvider implements InstagramProvider {
   private readonly workerUrl = process.env.INSTAGRAM_WORKER_URL?.replace(/\/$/, "");
 
   async fetchProfile(username: string): Promise<InstagramProviderResult> {
-    if (!this.workerUrl) throw new Error("مصدر Instagram غير مهيأ: أضف INSTAGRAM_WORKER_URL");
+    if (!this.workerUrl) throw new Error("مصدر بيانات الحساب غير مهيأ على الاستضافة. راجع إعدادات الخدمة ثم أعد المحاولة.");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {

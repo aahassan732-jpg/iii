@@ -326,7 +326,7 @@ var InstaloaderProvider = class {
   name = "instaloader";
   workerUrl = process.env.INSTAGRAM_WORKER_URL?.replace(/\/$/, "");
   async fetchProfile(username) {
-    if (!this.workerUrl) throw new Error("\u0645\u0635\u062F\u0631 Instagram \u063A\u064A\u0631 \u0645\u0647\u064A\u0623: \u0623\u0636\u0641 INSTAGRAM_WORKER_URL");
+    if (!this.workerUrl) throw new Error("\u0645\u0635\u062F\u0631 \u0628\u064A\u0627\u0646\u0627\u062A \u0627\u0644\u062D\u0633\u0627\u0628 \u063A\u064A\u0631 \u0645\u0647\u064A\u0623 \u0639\u0644\u0649 \u0627\u0644\u0627\u0633\u062A\u0636\u0627\u0641\u0629. \u0631\u0627\u062C\u0639 \u0625\u0639\u062F\u0627\u062F\u0627\u062A \u0627\u0644\u062E\u062F\u0645\u0629 \u062B\u0645 \u0623\u0639\u062F \u0627\u0644\u0645\u062D\u0627\u0648\u0644\u0629.");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1e4);
     try {
