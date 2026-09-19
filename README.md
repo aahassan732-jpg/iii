@@ -36,7 +36,7 @@ TELEGRAM_URL=
 
 تم إنشاء مخطط Drizzle داخل `drizzle/schema.ts` وتوليد migration في `drizzle/0001_lucky_jane_foster.sql`. كما تم تطبيق الجداول على قاعدة البيانات المُدارة للمشروع. الجداول تشمل المستخدمين، الملفات الشخصية، snapshots، التغييرات، المراقبة، الإشعارات، الاشتراكات، أكواد التفعيل، السجل التدقيقي، مفاتيح API، وWebhooks.
 
-قالب WebDev الحالي يستخدم MySQL/TiDB المُدارًا لضمان توافق المصادقة والبنية الموفرة. يمكن نقل adapter إلى PostgreSQL/Supabase لاحقًا دون تغيير عقد المزود أو الواجهة.
+يستخدم المشروع PostgreSQL عبر Supabase لتوفير قاعدة بيانات مُدارة واتصال آمن من Render. اضبط `DATABASE_URL` باستخدام رابط الاتصال الخاص بمشروع Supabase، ثم شغّل `pnpm db:push` لتطبيق migration على قاعدة البيانات الجديدة.
 
 ## Instagram Worker
 

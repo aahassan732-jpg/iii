@@ -4,7 +4,7 @@
 
 | المتغير | الغرض |
 | --- | --- |
-| `DATABASE_URL` | اتصال قاعدة البيانات المُدارة |
+| `DATABASE_URL` | رابط اتصال PostgreSQL الخاص بمشروع Supabase |
 | `JWT_SECRET` | جلسة المصادقة |
 | `INSTAGRAM_PROVIDER` | `instaloader` للإنتاج أو `mock` للتطوير فقط |
 | `INSTAGRAM_WORKER_URL` | عنوان عامل Python المنفصل |
@@ -14,4 +14,4 @@
 | `SITE_NAME` | اسم الموقع |
 | `SITE_DESCRIPTION` | وصف الموقع |
 
-في هذا القالب يعتمد التطبيق على قاعدة البيانات المُدارة التي يوفرها WebDev (MySQL/TiDB) لضمان عمل المصادقة والبنية الحالية. طبقة التخزين معزولة ويمكن نقلها إلى PostgreSQL/Supabase عبر adapter مستقل في نشر منفصل.
+يعتمد التطبيق على PostgreSQL المُدار في Supabase. بعد إضافة `DATABASE_URL` إلى Render، طبّق المخطط باستخدام `pnpm db:push`.

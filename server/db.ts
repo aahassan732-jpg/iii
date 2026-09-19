@@ -1,12 +1,13 @@
 import { and, desc, eq, gt, lte } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 import { activationCodes, appSettings, changeEvents, monitors, notifications, profiles, snapshots, subscriptions, users, type InsertUser } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { providerManager } from "../providers/instagram/ProviderManager";
 import { normalizeUsername } from "../providers/instagram/InstagramProvider";
 
 let _db: ReturnType<typeof drizzle> | null = null;
-export async function getDb() { if (!_db && process.env.DATABASE_URL) { try { _db = drizzle(process.env.DATABASE_URL); } catch (error) { console.warn("[Database] Failed to connect:", error); } } return _db; }
+export async function getDb() { if (!_db && process.env.DATABASE_URL) { try { _db = drizzle(postgres(process.env.DATABASE_URL, { max: 5, idle_timeout: 20 })); } catch (error) { console.warn("[Database] Failed to connect:", error); } } return _db; }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
@@ -15,7 +16,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   const updateSet: Record<string, unknown> = { lastSignedIn: values.lastSignedIn };
   for (const field of ["name", "email", "loginMethod"] as const) { if (user[field] !== undefined) { values[field] = user[field] ?? null; updateSet[field] = user[field] ?? null; } }
   if (user.role !== undefined || user.openId === ENV.ownerOpenId) { values.role = user.role ?? "admin"; updateSet.role = values.role; }
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
 }
 export async function getUserByOpenId(openId: string) { const db = await getDb(); if (!db) return undefined; const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1); return result[0]; }
 
@@ -31,7 +32,7 @@ export async function searchAndSnapshot(rawUsername: string) {
   if (freshEnough) return { profile: existing, cached: true, changes: [] };
   const result = await providerManager.active.fetchProfile(username);
   const before = existing;
-  await db.insert(profiles).values(profileValues(result.profile)).onDuplicateKeyUpdate({ set: profileValues(result.profile) });
+  await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
   const saved = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
   if (!saved) throw new Error("تعذر حفظ الملف الشخصي");
   const previousSnapshot = (await db.select().from(snapshots).where(eq(snapshots.profileId, saved.id)).orderBy(desc(snapshots.capturedAt)).limit(1))[0];

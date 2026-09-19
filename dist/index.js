@@ -32,31 +32,37 @@ import { parse as parseCookieHeader2 } from "cookie";
 
 // server/db.ts
 import { and, desc, eq, gt, lte } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import postgres from "postgres";
+import { drizzle } from "drizzle-orm/postgres-js";
 
 // drizzle/schema.ts
-import { boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
-var users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+import { boolean, index, integer, pgEnum, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+var userRole = pgEnum("user_role", ["user", "admin"]);
+var activationPlan = pgEnum("activation_plan", ["PRO", "BUSINESS"]);
+var subscriptionPlan = pgEnum("subscription_plan", ["FREE", "PRO", "BUSINESS"]);
+var subscriptionStatus = pgEnum("subscription_status", ["ACTIVE", "EXPIRED", "CANCELLED"]);
+var activationStatus = pgEnum("activation_status", ["UNUSED", "ACTIVE", "EXPIRED", "REVOKED"]);
+var users = pgTable("users", {
+  id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: userRole("role").default("user").notNull(),
   disabled: boolean("disabled").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
 });
-var profiles = mysqlTable("profiles", {
-  id: int("id").autoincrement().primaryKey(),
+var profiles = pgTable("profiles", {
+  id: serial("id").primaryKey(),
   username: varchar("username", { length: 30 }).notNull().unique(),
   userId: varchar("userId", { length: 64 }),
   displayName: text("displayName"),
   biography: text("biography"),
-  followers: int("followers"),
-  following: int("following"),
-  postCount: int("postCount"),
+  followers: integer("followers"),
+  following: integer("following"),
+  postCount: integer("postCount"),
   verified: boolean("verified"),
   isPrivate: boolean("isPrivate"),
   profilePictureUrl: varchar("profilePictureUrl", { length: 2048 }),
@@ -64,17 +70,17 @@ var profiles = mysqlTable("profiles", {
   lastFetchedAt: timestamp("lastFetchedAt"),
   provider: varchar("provider", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+  updatedAt: timestamp("updatedAt").defaultNow().notNull()
 }, (table) => ({ usernameIndex: index("profiles_username_idx").on(table.username) }));
-var snapshots = mysqlTable("snapshots", {
-  id: int("id").autoincrement().primaryKey(),
-  profileId: int("profileId").notNull(),
+var snapshots = pgTable("snapshots", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profileId").notNull(),
   username: varchar("username", { length: 30 }).notNull(),
   displayName: text("displayName"),
   biography: text("biography"),
-  followers: int("followers"),
-  following: int("following"),
-  postCount: int("postCount"),
+  followers: integer("followers"),
+  following: integer("following"),
+  postCount: integer("postCount"),
   verified: boolean("verified"),
   isPrivate: boolean("isPrivate"),
   profilePictureUrl: varchar("profilePictureUrl", { length: 2048 }),
@@ -82,34 +88,34 @@ var snapshots = mysqlTable("snapshots", {
   provider: varchar("provider", { length: 64 }),
   capturedAt: timestamp("capturedAt").defaultNow().notNull()
 }, (table) => ({ profileTimeIndex: index("snapshots_profile_time_idx").on(table.profileId, table.capturedAt) }));
-var changeEvents = mysqlTable("change_events", {
-  id: int("id").autoincrement().primaryKey(),
-  profileId: int("profileId").notNull(),
+var changeEvents = pgTable("change_events", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profileId").notNull(),
   username: varchar("username", { length: 30 }).notNull(),
   type: varchar("type", { length: 64 }).notNull(),
   beforeValue: text("beforeValue"),
   afterValue: text("afterValue"),
   occurredAt: timestamp("occurredAt").defaultNow().notNull()
 }, (table) => ({ changeTimeIndex: index("changes_profile_time_idx").on(table.profileId, table.occurredAt) }));
-var monitors = mysqlTable("monitors", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  profileId: int("profileId").notNull(),
-  frequencyMinutes: int("frequencyMinutes").default(1440).notNull(),
+var monitors = pgTable("monitors", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  profileId: integer("profileId").notNull(),
+  frequencyMinutes: integer("frequencyMinutes").default(1440).notNull(),
   active: boolean("active").default(true).notNull(),
   nextRunAt: timestamp("nextRunAt"),
   lastRunAt: timestamp("lastRunAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull()
 }, (table) => ({ monitorUserIndex: index("monitors_user_idx").on(table.userId), monitorDueIndex: index("monitors_due_idx").on(table.active, table.nextRunAt) }));
-var notifications = mysqlTable("notifications", { id: int("id").autoincrement().primaryKey(), userId: int("userId").notNull(), title: varchar("title", { length: 255 }).notNull(), body: text("body").notNull(), type: varchar("type", { length: 64 }).notNull(), read: boolean("read").default(false).notNull(), createdAt: timestamp("createdAt").defaultNow().notNull() });
-var activationCodes = mysqlTable("activation_codes", { id: int("id").autoincrement().primaryKey(), codeHash: varchar("codeHash", { length: 128 }).notNull().unique(), plan: mysqlEnum("plan", ["PRO", "BUSINESS"]).notNull(), durationDays: int("durationDays").notNull(), createdBy: int("createdBy").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), expiresAt: timestamp("expiresAt").notNull(), usedAt: timestamp("usedAt"), usedBy: int("usedBy"), status: mysqlEnum("status", ["UNUSED", "ACTIVE", "EXPIRED", "REVOKED"]).default("UNUSED").notNull(), note: text("note") });
-var subscriptions = mysqlTable("subscriptions", { id: int("id").autoincrement().primaryKey(), userId: int("userId").notNull(), plan: mysqlEnum("plan", ["FREE", "PRO", "BUSINESS"]).default("FREE").notNull(), status: mysqlEnum("status", ["ACTIVE", "EXPIRED", "CANCELLED"]).default("ACTIVE").notNull(), startedAt: timestamp("startedAt").defaultNow().notNull(), expiresAt: timestamp("expiresAt"), activationCodeId: int("activationCodeId"), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull() }, (table) => ({ subscriptionUserIndex: index("subscriptions_user_idx").on(table.userId) }));
-var subscriptionEvents = mysqlTable("subscription_events", { id: int("id").autoincrement().primaryKey(), subscriptionId: int("subscriptionId").notNull(), actorId: int("actorId"), action: varchar("action", { length: 64 }).notNull(), metadata: text("metadata"), createdAt: timestamp("createdAt").defaultNow().notNull() });
-var payments = mysqlTable("payments", { id: int("id").autoincrement().primaryKey(), userId: int("userId").notNull(), plan: varchar("plan", { length: 32 }).notNull(), amount: int("amount").notNull(), currency: varchar("currency", { length: 8 }).default("SAR").notNull(), status: varchar("status", { length: 32 }).default("PENDING").notNull(), paymentReference: varchar("paymentReference", { length: 255 }), proofUrl: varchar("proofUrl", { length: 2048 }), createdAt: timestamp("createdAt").defaultNow().notNull(), reviewedBy: int("reviewedBy"), reviewedAt: timestamp("reviewedAt") });
-var auditLogs = mysqlTable("audit_logs", { id: int("id").autoincrement().primaryKey(), adminId: int("adminId").notNull(), action: varchar("action", { length: 100 }).notNull(), target: varchar("target", { length: 255 }).notNull(), metadata: text("metadata"), createdAt: timestamp("createdAt").defaultNow().notNull() });
-var appSettings = mysqlTable("app_settings", { id: int("id").autoincrement().primaryKey(), settingKey: varchar("settingKey", { length: 100 }).notNull().unique(), settingValue: text("settingValue").notNull(), updatedBy: int("updatedBy"), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull() });
-var apiKeys = mysqlTable("api_keys", { id: int("id").autoincrement().primaryKey(), userId: int("userId").notNull(), keyHash: varchar("keyHash", { length: 128 }).notNull().unique(), label: varchar("label", { length: 100 }), lastUsedAt: timestamp("lastUsedAt"), createdAt: timestamp("createdAt").defaultNow().notNull(), revokedAt: timestamp("revokedAt") });
-var webhooks = mysqlTable("webhooks", { id: int("id").autoincrement().primaryKey(), userId: int("userId").notNull(), url: varchar("url", { length: 2048 }).notNull(), secret: varchar("secret", { length: 128 }).notNull(), active: boolean("active").default(true).notNull(), createdAt: timestamp("createdAt").defaultNow().notNull() });
+var notifications = pgTable("notifications", { id: serial("id").primaryKey(), userId: integer("userId").notNull(), title: varchar("title", { length: 255 }).notNull(), body: text("body").notNull(), type: varchar("type", { length: 64 }).notNull(), read: boolean("read").default(false).notNull(), createdAt: timestamp("createdAt").defaultNow().notNull() });
+var activationCodes = pgTable("activation_codes", { id: serial("id").primaryKey(), codeHash: varchar("codeHash", { length: 128 }).notNull().unique(), plan: activationPlan("plan").notNull(), durationDays: integer("durationDays").notNull(), createdBy: integer("createdBy").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), expiresAt: timestamp("expiresAt").notNull(), usedAt: timestamp("usedAt"), usedBy: integer("usedBy"), status: activationStatus("status").default("UNUSED").notNull(), note: text("note") });
+var subscriptions = pgTable("subscriptions", { id: serial("id").primaryKey(), userId: integer("userId").notNull(), plan: subscriptionPlan("plan").default("FREE").notNull(), status: subscriptionStatus("status").default("ACTIVE").notNull(), startedAt: timestamp("startedAt").defaultNow().notNull(), expiresAt: timestamp("expiresAt"), activationCodeId: integer("activationCodeId"), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().notNull() }, (table) => ({ subscriptionUserIndex: index("subscriptions_user_idx").on(table.userId) }));
+var subscriptionEvents = pgTable("subscription_events", { id: serial("id").primaryKey(), subscriptionId: integer("subscriptionId").notNull(), actorId: integer("actorId"), action: varchar("action", { length: 64 }).notNull(), metadata: text("metadata"), createdAt: timestamp("createdAt").defaultNow().notNull() });
+var payments = pgTable("payments", { id: serial("id").primaryKey(), userId: integer("userId").notNull(), plan: varchar("plan", { length: 32 }).notNull(), amount: integer("amount").notNull(), currency: varchar("currency", { length: 8 }).default("SAR").notNull(), status: varchar("status", { length: 32 }).default("PENDING").notNull(), paymentReference: varchar("paymentReference", { length: 255 }), proofUrl: varchar("proofUrl", { length: 2048 }), createdAt: timestamp("createdAt").defaultNow().notNull(), reviewedBy: integer("reviewedBy"), reviewedAt: timestamp("reviewedAt") });
+var auditLogs = pgTable("audit_logs", { id: serial("id").primaryKey(), adminId: integer("adminId").notNull(), action: varchar("action", { length: 100 }).notNull(), target: varchar("target", { length: 255 }).notNull(), metadata: text("metadata"), createdAt: timestamp("createdAt").defaultNow().notNull() });
+var appSettings = pgTable("app_settings", { id: serial("id").primaryKey(), settingKey: varchar("settingKey", { length: 100 }).notNull().unique(), settingValue: text("settingValue").notNull(), updatedBy: integer("updatedBy"), updatedAt: timestamp("updatedAt").defaultNow().notNull() });
+var apiKeys = pgTable("api_keys", { id: serial("id").primaryKey(), userId: integer("userId").notNull(), keyHash: varchar("keyHash", { length: 128 }).notNull().unique(), label: varchar("label", { length: 100 }), lastUsedAt: timestamp("lastUsedAt"), createdAt: timestamp("createdAt").defaultNow().notNull(), revokedAt: timestamp("revokedAt") });
+var webhooks = pgTable("webhooks", { id: serial("id").primaryKey(), userId: integer("userId").notNull(), url: varchar("url", { length: 2048 }).notNull(), secret: varchar("secret", { length: 128 }).notNull(), active: boolean("active").default(true).notNull(), createdAt: timestamp("createdAt").defaultNow().notNull() });
 
 // server/_core/env.ts
 var ENV = {
@@ -211,7 +217,7 @@ var _db = null;
 async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = drizzle(postgres(process.env.DATABASE_URL, { max: 5, idle_timeout: 20 }));
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
     }
@@ -234,7 +240,7 @@ async function upsertUser(user) {
     values.role = user.role ?? "admin";
     updateSet.role = values.role;
   }
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
 }
 async function getUserByOpenId(openId) {
   const db = await getDb();
@@ -255,7 +261,7 @@ async function searchAndSnapshot(rawUsername) {
   if (freshEnough) return { profile: existing, cached: true, changes: [] };
   const result = await providerManager.active.fetchProfile(username);
   const before = existing;
-  await db.insert(profiles).values(profileValues(result.profile)).onDuplicateKeyUpdate({ set: profileValues(result.profile) });
+  await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
   const saved = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
   if (!saved) throw new Error("\u062A\u0639\u0630\u0631 \u062D\u0641\u0638 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A");
   const previousSnapshot = (await db.select().from(snapshots).where(eq(snapshots.profileId, saved.id)).orderBy(desc(snapshots.capturedAt)).limit(1))[0];
@@ -941,7 +947,7 @@ var appRouter = router({
     updateSetting: adminProcedure2.input(z2.object({ key: z2.string().min(1).max(100), value: z2.string().max(2e3) })).mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: "\u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u063A\u064A\u0631 \u0645\u062A\u0627\u062D\u0629" });
-      await db.insert(appSettings).values({ settingKey: input.key, settingValue: input.value, updatedBy: ctx.user.id }).onDuplicateKeyUpdate({ set: { settingValue: input.value, updatedBy: ctx.user.id } });
+      await db.insert(appSettings).values({ settingKey: input.key, settingValue: input.value, updatedBy: ctx.user.id }).onConflictDoUpdate({ target: appSettings.settingKey, set: { settingValue: input.value, updatedBy: ctx.user.id } });
       return { success: true };
     })
   }),

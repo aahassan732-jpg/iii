@@ -56,7 +56,7 @@ export const appRouter = router({
       await db.insert(activationCodes).values({ codeHash: hashSecret(code), plan: input.plan, durationDays: input.durationDays, createdBy: ctx.user.id, expiresAt: new Date(Date.now() + input.durationDays * 86_400_000), note: input.note ?? null });
       return { code, warning: "سيظهر هذا الكود مرة واحدة فقط؛ خزّنه بأمان." };
     }),
-    updateSetting: adminProcedure.input(z.object({ key: z.string().min(1).max(100), value: z.string().max(2000) })).mutation(async ({ ctx, input }) => { const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" }); await db.insert(appSettings).values({ settingKey: input.key, settingValue: input.value, updatedBy: ctx.user.id }).onDuplicateKeyUpdate({ set: { settingValue: input.value, updatedBy: ctx.user.id } }); return { success: true }; }),
+    updateSetting: adminProcedure.input(z.object({ key: z.string().min(1).max(100), value: z.string().max(2000) })).mutation(async ({ ctx, input }) => { const db = await getDb(); if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "قاعدة البيانات غير متاحة" }); await db.insert(appSettings).values({ settingKey: input.key, settingValue: input.value, updatedBy: ctx.user.id }).onConflictDoUpdate({ target: appSettings.settingKey, set: { settingValue: input.value, updatedBy: ctx.user.id } }); return { success: true }; }),
   }),
   health: publicProcedure.query(() => ({ provider: providerManager.active.name, status: providerManager.active.health() })),
 });
