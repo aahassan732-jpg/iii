@@ -65,7 +65,7 @@ def profile():
 
     global _last_request_at
     with _lock:
-        wait = _min_request_interval - (time.time() - _last_request_at)
+        wait = _min_interval - (time.time() - _last_request_at)
         if wait > 0:
             return jsonify({"error": "مصدر Instagram يفرض مهلة بين الطلبات. حاول بعد قليل.", "retryAfterSeconds": round(wait)}), 429
         _last_request_at = time.time()
