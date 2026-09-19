@@ -1,4 +1,4 @@
-# InstaLens
+# مرقاب
 
 منصة عربية RTL لتحليل الحسابات العامة في Instagram، حفظ snapshots، اكتشاف التغييرات، ومراقبة الحسابات ضمن حدود المصدر.
 
@@ -98,11 +98,11 @@ x-api-key: <business-key>
 ## النشر
 
 1. احفظ checkpoint للمشروع.
-2. انشر واجهة InstaLens على استضافة WebDev/Vercel مع متغيرات المنصة.
+2. انشر واجهة مرقاب على استضافة WebDev/Vercel مع متغيرات المنصة.
 3. انشر `worker/instagram` على Cloud Run أو Render أو Fly.io أو خدمة Python مماثلة، ثم اضبط `INSTAGRAM_WORKER_URL`.
 4. اضبط `MONITOR_CRON_SECRET` في الموقع و`INSTALENS_MONITOR_URL` و`INSTALENS_MONITOR_SECRET` في GitHub Actions، أو استخدم Cron مُدارًا آخر.
 5. راقب Provider Health و429 ولا ترفع التوازي أو تتجاوز حدود Instagram.
 
 ## English summary
 
-InstaLens is an Arabic RTL full-stack product for public Instagram profile snapshots, change detection, monitoring, manual subscriptions, one-time activation codes, and a Business API. The Instagram provider is isolated behind an interface. Instaloader 4.15.3 was installed and tested; Instagram returned HTTP 429 during the probe, so production failures are handled gracefully and a mock provider is development-only. The Python worker must be deployed separately from the Node web process.
+مرقاب is an Arabic RTL full-stack product for public Instagram profile snapshots, change detection, monitoring, manual subscriptions, one-time activation codes, and a Business API. The Instagram provider is isolated behind an interface. Instaloader 4.15.3 was installed and tested; Instagram returned HTTP 429 during the probe, so production failures are handled gracefully and a mock provider is development-only. The Python worker must be deployed separately from the Node web process.
