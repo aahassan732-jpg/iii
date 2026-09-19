@@ -27,18 +27,24 @@ function profileValues(profile: Awaited<ReturnType<typeof providerManager.active
 export async function searchAndSnapshot(rawUsername: string) {
   const username = normalizeUsername(rawUsername); if (!username) throw new Error("اسم المستخدم غير صالح");
   const db = await getDb(); if (!db) throw new Error("قاعدة البيانات غير متاحة حاليًا");
-  const existing = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
-  const freshEnough = existing?.lastFetchedAt && Date.now() - existing.lastFetchedAt.getTime() < Number(process.env.PROFILE_CACHE_TTL_MS ?? 15 * 60 * 1000);
-  if (freshEnough) return { profile: existing, cached: true, changes: [] };
+  const existingByUsername = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
+  const freshEnough = existingByUsername?.lastFetchedAt && Date.now() - existingByUsername.lastFetchedAt.getTime() < Number(process.env.PROFILE_CACHE_TTL_MS ?? 15 * 60 * 1000);
+  if (freshEnough) return { profile: existingByUsername, cached: true, changes: [] };
   const result = await providerManager.active.fetchProfile(username);
-  const before = existing;
-  await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
-  const saved = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
+  const existingByIdentity = !existingByUsername && result.profile.userId
+    ? (await db.select().from(profiles).where(eq(profiles.userId, result.profile.userId)).limit(1))[0]
+    : undefined;
+  const existing = existingByUsername ?? existingByIdentity;
+  if (existing) await db.update(profiles).set(profileValues(result.profile)).where(eq(profiles.id, existing.id));
+  else await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
+  const saved = existing
+    ? (await db.select().from(profiles).where(eq(profiles.id, existing.id)).limit(1))[0]
+    : (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
   if (!saved) throw new Error("تعذر حفظ الملف الشخصي");
   const previousSnapshot = (await db.select().from(snapshots).where(eq(snapshots.profileId, saved.id)).orderBy(desc(snapshots.capturedAt)).limit(1))[0];
   await db.insert(snapshots).values({ profileId: saved.id, ...profileValues(result.profile), capturedAt: result.profile.fetchedAt });
   const changeFields: Array<[string, unknown, unknown]> = [
-    ["BIO_CHANGED", previousSnapshot?.biography, result.profile.biography], ["DISPLAY_NAME_CHANGED", previousSnapshot?.displayName, result.profile.displayName], ["PROFILE_PICTURE_CHANGED", previousSnapshot?.profilePictureUrl, result.profile.profilePictureUrl], ["FOLLOWERS_CHANGED", previousSnapshot?.followers, result.profile.followers], ["FOLLOWING_CHANGED", previousSnapshot?.following, result.profile.following], ["POST_COUNT_CHANGED", previousSnapshot?.postCount, result.profile.postCount], ["VERIFICATION_CHANGED", previousSnapshot?.verified, result.profile.verified], ["EXTERNAL_URL_CHANGED", previousSnapshot?.externalUrl, result.profile.externalUrl], ["PRIVACY_STATUS_CHANGED", previousSnapshot?.isPrivate, result.profile.isPrivate],
+    ["USERNAME_CHANGED", previousSnapshot?.username, result.profile.username], ["BIO_CHANGED", previousSnapshot?.biography, result.profile.biography], ["DISPLAY_NAME_CHANGED", previousSnapshot?.displayName, result.profile.displayName], ["PROFILE_PICTURE_CHANGED", previousSnapshot?.profilePictureUrl, result.profile.profilePictureUrl], ["FOLLOWERS_CHANGED", previousSnapshot?.followers, result.profile.followers], ["FOLLOWING_CHANGED", previousSnapshot?.following, result.profile.following], ["POST_COUNT_CHANGED", previousSnapshot?.postCount, result.profile.postCount], ["VERIFICATION_CHANGED", previousSnapshot?.verified, result.profile.verified], ["EXTERNAL_URL_CHANGED", previousSnapshot?.externalUrl, result.profile.externalUrl], ["PRIVACY_STATUS_CHANGED", previousSnapshot?.isPrivate, result.profile.isPrivate],
   ];
   const changes = previousSnapshot ? changeFields.filter(([, oldValue, newValue]) => String(oldValue ?? "") !== String(newValue ?? "")).map(([type, oldValue, newValue]) => ({ type, before: oldValue ?? null, after: newValue ?? null })) : [];
   for (const change of changes) await db.insert(changeEvents).values({ profileId: saved.id, username, type: change.type, beforeValue: change.before === null ? null : String(change.before), afterValue: change.after === null ? null : String(change.after), occurredAt: result.profile.fetchedAt });
