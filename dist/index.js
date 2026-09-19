@@ -423,17 +423,20 @@ async function searchAndSnapshot(rawUsername) {
   if (!username) throw new Error("\u0627\u0633\u0645 \u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D");
   const db = await getDb();
   if (!db) throw new Error("\u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u063A\u064A\u0631 \u0645\u062A\u0627\u062D\u0629 \u062D\u0627\u0644\u064A\u064B\u0627");
-  const existing = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
-  const freshEnough = existing?.lastFetchedAt && Date.now() - existing.lastFetchedAt.getTime() < Number(process.env.PROFILE_CACHE_TTL_MS ?? 15 * 60 * 1e3);
-  if (freshEnough) return { profile: existing, cached: true, changes: [] };
+  const existingByUsername = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
+  const freshEnough = existingByUsername?.lastFetchedAt && Date.now() - existingByUsername.lastFetchedAt.getTime() < Number(process.env.PROFILE_CACHE_TTL_MS ?? 15 * 60 * 1e3);
+  if (freshEnough) return { profile: existingByUsername, cached: true, changes: [] };
   const result = await providerManager.active.fetchProfile(username);
-  const before = existing;
-  await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
-  const saved = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
+  const existingByIdentity = !existingByUsername && result.profile.userId ? (await db.select().from(profiles).where(eq(profiles.userId, result.profile.userId)).limit(1))[0] : void 0;
+  const existing = existingByUsername ?? existingByIdentity;
+  if (existing) await db.update(profiles).set(profileValues(result.profile)).where(eq(profiles.id, existing.id));
+  else await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
+  const saved = existing ? (await db.select().from(profiles).where(eq(profiles.id, existing.id)).limit(1))[0] : (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
   if (!saved) throw new Error("\u062A\u0639\u0630\u0631 \u062D\u0641\u0638 \u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A");
   const previousSnapshot = (await db.select().from(snapshots).where(eq(snapshots.profileId, saved.id)).orderBy(desc(snapshots.capturedAt)).limit(1))[0];
   await db.insert(snapshots).values({ profileId: saved.id, ...profileValues(result.profile), capturedAt: result.profile.fetchedAt });
   const changeFields = [
+    ["USERNAME_CHANGED", previousSnapshot?.username, result.profile.username],
     ["BIO_CHANGED", previousSnapshot?.biography, result.profile.biography],
     ["DISPLAY_NAME_CHANGED", previousSnapshot?.displayName, result.profile.displayName],
     ["PROFILE_PICTURE_CHANGED", previousSnapshot?.profilePictureUrl, result.profile.profilePictureUrl],
