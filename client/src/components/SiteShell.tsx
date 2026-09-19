@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 
-const navItems = [["الرئيسية", "/"], ["تحليل حساب", "/search"], ["المراقبة", "/dashboard"], ["المقارنة", "/compare"], ["الباقات", "/pricing"]] as const;
+const navItems = [["الرئيسية", "/"], ["تحليل حساب", "/search"], ["المراقبة", "/dashboard"], ["مقارنة المتابعين", "/followers-import"], ["المقارنة", "/compare"], ["الباقات", "/pricing"]] as const;
 
 export default function SiteShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false); const [location] = useLocation(); const { isAuthenticated, user, logout } = useAuth();

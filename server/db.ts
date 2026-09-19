@@ -7,6 +7,9 @@ import { providerManager } from "../providers/instagram/ProviderManager";
 import { normalizeUsername } from "../providers/instagram/InstagramProvider";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let providerCooldownUntil = 0;
+const queuedUsernames = new Set<string>();
+
 export async function getDb() { if (!_db && process.env.DATABASE_URL) { try { _db = drizzle(postgres(process.env.DATABASE_URL, { max: 5, idle_timeout: 20 })); } catch (error) { console.warn("[Database] Failed to connect:", error); } } return _db; }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -24,31 +27,60 @@ function profileValues(profile: Awaited<ReturnType<typeof providerManager.active
   return { username: profile.username, userId: profile.userId ?? null, displayName: profile.displayName ?? null, biography: profile.biography ?? null, followers: profile.followers ?? null, following: profile.following ?? null, postCount: profile.postCount ?? null, verified: profile.verified ?? null, isPrivate: profile.isPrivate ?? null, profilePictureUrl: profile.profilePictureUrl ?? null, externalUrl: profile.externalUrl ?? null, lastFetchedAt: profile.fetchedAt, provider: profile.source };
 }
 
+function isRateLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /429|حدًا مؤقتًا|مهلة بين الطلبات|rate.?limit|too many/i.test(message);
+}
+
+function staleResult(profile: typeof profiles.$inferSelect, reason: string) {
+  return { profile, cached: true, stale: true, queued: true, providerError: reason, changes: [] as Array<{ type: string; before: unknown; after: unknown }> };
+}
+
 export async function searchAndSnapshot(rawUsername: string) {
   const username = normalizeUsername(rawUsername); if (!username) throw new Error("اسم المستخدم غير صالح");
   const db = await getDb(); if (!db) throw new Error("قاعدة البيانات غير متاحة حاليًا");
   const existingByUsername = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
   const freshEnough = existingByUsername?.lastFetchedAt && Date.now() - existingByUsername.lastFetchedAt.getTime() < Number(process.env.PROFILE_CACHE_TTL_MS ?? 15 * 60 * 1000);
-  if (freshEnough) return { profile: existingByUsername, cached: true, changes: [] };
-  const result = await providerManager.active.fetchProfile(username);
-  const existingByIdentity = !existingByUsername && result.profile.userId
-    ? (await db.select().from(profiles).where(eq(profiles.userId, result.profile.userId)).limit(1))[0]
-    : undefined;
-  const existing = existingByUsername ?? existingByIdentity;
-  if (existing) await db.update(profiles).set(profileValues(result.profile)).where(eq(profiles.id, existing.id));
-  else await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
-  const saved = existing
-    ? (await db.select().from(profiles).where(eq(profiles.id, existing.id)).limit(1))[0]
-    : (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
-  if (!saved) throw new Error("تعذر حفظ الملف الشخصي");
-  const previousSnapshot = (await db.select().from(snapshots).where(eq(snapshots.profileId, saved.id)).orderBy(desc(snapshots.capturedAt)).limit(1))[0];
-  await db.insert(snapshots).values({ profileId: saved.id, ...profileValues(result.profile), capturedAt: result.profile.fetchedAt });
-  const changeFields: Array<[string, unknown, unknown]> = [
-    ["USERNAME_CHANGED", previousSnapshot?.username, result.profile.username], ["BIO_CHANGED", previousSnapshot?.biography, result.profile.biography], ["DISPLAY_NAME_CHANGED", previousSnapshot?.displayName, result.profile.displayName], ["PROFILE_PICTURE_CHANGED", previousSnapshot?.profilePictureUrl, result.profile.profilePictureUrl], ["FOLLOWERS_CHANGED", previousSnapshot?.followers, result.profile.followers], ["FOLLOWING_CHANGED", previousSnapshot?.following, result.profile.following], ["POST_COUNT_CHANGED", previousSnapshot?.postCount, result.profile.postCount], ["VERIFICATION_CHANGED", previousSnapshot?.verified, result.profile.verified], ["EXTERNAL_URL_CHANGED", previousSnapshot?.externalUrl, result.profile.externalUrl], ["PRIVACY_STATUS_CHANGED", previousSnapshot?.isPrivate, result.profile.isPrivate],
-  ];
-  const changes = previousSnapshot ? changeFields.filter(([, oldValue, newValue]) => String(oldValue ?? "") !== String(newValue ?? "")).map(([type, oldValue, newValue]) => ({ type, before: oldValue ?? null, after: newValue ?? null })) : [];
-  for (const change of changes) await db.insert(changeEvents).values({ profileId: saved.id, username, type: change.type, beforeValue: change.before === null ? null : String(change.before), afterValue: change.after === null ? null : String(change.after), occurredAt: result.profile.fetchedAt });
-  return { profile: saved, cached: false, changes };
+  if (freshEnough) return { profile: existingByUsername, cached: true, stale: false, queued: false, changes: [] };
+
+  if (existingByUsername && Date.now() < providerCooldownUntil) {
+    queuedUsernames.add(username);
+    return staleResult(existingByUsername, "التحديث مؤجل مؤقتًا بسبب حد الطلبات. نعرض آخر لقطة حقيقية محفوظة.");
+  }
+
+  if (queuedUsernames.has(username)) return existingByUsername ? staleResult(existingByUsername, "الحساب موجود في طابور التحديث.") : (() => { throw new Error("الحساب في طابور التحديث وسيظهر بعد نجاح الفحص."); })();
+  queuedUsernames.add(username);
+  try {
+    const result = await providerManager.active.fetchProfile(username);
+    providerCooldownUntil = 0;
+    const existingByIdentity = !existingByUsername && result.profile.userId
+      ? (await db.select().from(profiles).where(eq(profiles.userId, result.profile.userId)).limit(1))[0]
+      : undefined;
+    const existing = existingByUsername ?? existingByIdentity;
+    if (existing) await db.update(profiles).set(profileValues(result.profile)).where(eq(profiles.id, existing.id));
+    else await db.insert(profiles).values(profileValues(result.profile)).onConflictDoUpdate({ target: profiles.username, set: profileValues(result.profile) });
+    const saved = existing
+      ? (await db.select().from(profiles).where(eq(profiles.id, existing.id)).limit(1))[0]
+      : (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0];
+    if (!saved) throw new Error("تعذر حفظ الملف الشخصي");
+    const previousSnapshot = (await db.select().from(snapshots).where(eq(snapshots.profileId, saved.id)).orderBy(desc(snapshots.capturedAt)).limit(1))[0];
+    await db.insert(snapshots).values({ profileId: saved.id, ...profileValues(result.profile), capturedAt: result.profile.fetchedAt });
+    const changeFields: Array<[string, unknown, unknown]> = [
+      ["USERNAME_CHANGED", previousSnapshot?.username, result.profile.username], ["BIO_CHANGED", previousSnapshot?.biography, result.profile.biography], ["DISPLAY_NAME_CHANGED", previousSnapshot?.displayName, result.profile.displayName], ["PROFILE_PICTURE_CHANGED", previousSnapshot?.profilePictureUrl, result.profile.profilePictureUrl], ["FOLLOWERS_CHANGED", previousSnapshot?.followers, result.profile.followers], ["FOLLOWING_CHANGED", previousSnapshot?.following, result.profile.following], ["POST_COUNT_CHANGED", previousSnapshot?.postCount, result.profile.postCount], ["VERIFICATION_CHANGED", previousSnapshot?.verified, result.profile.verified], ["EXTERNAL_URL_CHANGED", previousSnapshot?.externalUrl, result.profile.externalUrl], ["PRIVACY_STATUS_CHANGED", previousSnapshot?.isPrivate, result.profile.isPrivate],
+    ];
+    const changes = previousSnapshot ? changeFields.filter(([, oldValue, newValue]) => String(oldValue ?? "") !== String(newValue ?? "")).map(([type, oldValue, newValue]) => ({ type, before: oldValue ?? null, after: newValue ?? null })) : [];
+    for (const change of changes) await db.insert(changeEvents).values({ profileId: saved.id, username, type: change.type, beforeValue: change.before === null ? null : String(change.before), afterValue: change.after === null ? null : String(change.after), occurredAt: result.profile.fetchedAt });
+    return { profile: saved, cached: false, stale: false, queued: false, changes };
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      const cooldownSeconds = Number(process.env.INSTAGRAM_COOLDOWN_SECONDS ?? 1800);
+      providerCooldownUntil = Date.now() + cooldownSeconds * 1000;
+      if (existingByUsername) return staleResult(existingByUsername, "مصدر Instagram فرض حدًا مؤقتًا على الطلبات. نعرض آخر لقطة حقيقية محفوظة وسيُعاد التحديث لاحقًا.");
+    }
+    throw error;
+  } finally {
+    queuedUsernames.delete(username);
+  }
 }
 
 export async function getProfileHistory(rawUsername: string) { const db = await getDb(); if (!db) return []; const username = normalizeUsername(rawUsername); const profile = (await db.select().from(profiles).where(eq(profiles.username, username)).limit(1))[0]; if (!profile) return []; return db.select().from(snapshots).where(eq(snapshots.profileId, profile.id)).orderBy(desc(snapshots.capturedAt)).limit(100); }

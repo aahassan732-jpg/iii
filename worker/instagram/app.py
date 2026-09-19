@@ -17,8 +17,9 @@ if _session_id:
 _request_timeout = max(float(os.getenv("INSTAGRAM_REQUEST_TIMEOUT_SECONDS", "12")), 3.0)
 _lock = Lock()
 _last_request_at = 0.0
-_min_interval = max(float(os.getenv("MIN_REQUEST_INTERVAL_SECONDS", "8")), 1.0)
-_cache_ttl = max(int(os.getenv("PROFILE_CACHE_SECONDS", "300")), 30)
+_min_interval = max(float(os.getenv("MIN_REQUEST_INTERVAL_SECONDS", "30")), 1.0)
+_cache_ttl = max(int(os.getenv("PROFILE_CACHE_SECONDS", "900")), 30)
+_cooldown_until = 0.0
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
@@ -40,7 +41,7 @@ def _profile_payload(user: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ready", "provider": "instagram-http", "sessionConfigured": bool(_session_id)})
+    return jsonify({"status": "ready", "provider": "instagram-http", "sessionConfigured": bool(_session_id), "cooldown": max(0, round(_cooldown_until - time.time()))})
 
 
 @app.post("/profile")
@@ -53,14 +54,17 @@ def profile():
     now = time.time()
     cached = _cache.get(username)
     if cached and now - cached[0] < _cache_ttl:
-        return jsonify({"profile": cached[1], "cached": True})
+        return jsonify({"profile": cached[1], "cached": True, "stale": False})
 
-    global _last_request_at
+    global _last_request_at, _cooldown_until
     with _lock:
-        wait = _min_interval - (time.time() - _last_request_at)
+        now = time.time()
+        if now < _cooldown_until:
+            return jsonify({"error": "مصدر Instagram في فترة تهدئة مؤقتة.", "retryAfterSeconds": round(_cooldown_until - now)}), 429
+        wait = _min_interval - (now - _last_request_at)
         if wait > 0:
-            return jsonify({"error": "مصدر Instagram يفرض مهلة بين الطلبات. حاول بعد قليل.", "retryAfterSeconds": round(wait)}), 429
-        _last_request_at = time.time()
+            return jsonify({"error": "مصدر Instagram يفرض مهلة بين الطلبات.", "retryAfterSeconds": round(wait)}), 429
+        _last_request_at = now
         try:
             response = _session.get(
                 "https://www.instagram.com/api/v1/users/web_profile_info/",
@@ -68,7 +72,8 @@ def profile():
                 timeout=_request_timeout,
             )
             if response.status_code == 429:
-                return jsonify({"error": "مصدر Instagram فرض حدًا مؤقتًا على الطلبات. حاول لاحقًا.", "retryAfterSeconds": 60}), 429
+                _cooldown_until = time.time() + max(int(os.getenv("INSTAGRAM_COOLDOWN_SECONDS", "1800")), 60)
+                return jsonify({"error": "مصدر Instagram فرض حدًا مؤقتًا على الطلبات.", "retryAfterSeconds": round(_cooldown_until - time.time())}), 429
             if response.status_code == 404:
                 return jsonify({"error": "الحساب غير موجود"}), 404
             response.raise_for_status()
@@ -78,7 +83,8 @@ def profile():
                 return jsonify({"error": "لم يعثر المصدر على بيانات الحساب"}), 404
             result = _profile_payload(user)
             _cache[username] = (time.time(), result)
-            return jsonify({"profile": result, "cached": False})
+            _cooldown_until = 0.0
+            return jsonify({"profile": result, "cached": False, "stale": False})
         except requests.Timeout:
             return jsonify({"error": "انتهت مهلة الاتصال بمصدر Instagram. حاول لاحقًا."}), 504
         except requests.RequestException:
