@@ -328,7 +328,7 @@ var InstaloaderProvider = class {
   async fetchProfile(username) {
     if (!this.workerUrl) throw new Error("\u0645\u0635\u062F\u0631 Instagram \u063A\u064A\u0631 \u0645\u0647\u064A\u0623: \u0623\u0636\u0641 INSTAGRAM_WORKER_URL");
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3e4);
+    const timeout = setTimeout(() => controller.abort(), 1e4);
     try {
       const response = await fetch(`${this.workerUrl}/profile`, {
         method: "POST",
@@ -348,7 +348,7 @@ var InstaloaderProvider = class {
       }
       return { profile: mapWorkerProfile(payload, username, this.name) };
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") throw new Error("\u0627\u0646\u062A\u0647\u062A \u0645\u0647\u0644\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0645\u0635\u062F\u0631 Instagram");
+      if (error instanceof Error && error.name === "AbortError") throw new Error("\u0644\u0645 \u064A\u0633\u062A\u062C\u0628 \u0645\u0635\u062F\u0631 Instagram \u062E\u0644\u0627\u0644 10 \u062B\u0648\u0627\u0646\u064D. \u062D\u0627\u0648\u0644 \u0644\u0627\u062D\u0642\u064B\u0627.");
       throw error;
     } finally {
       clearTimeout(timeout);

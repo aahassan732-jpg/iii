@@ -56,7 +56,7 @@ export class InstaloaderProvider implements InstagramProvider {
   async fetchProfile(username: string): Promise<InstagramProviderResult> {
     if (!this.workerUrl) throw new Error("مصدر Instagram غير مهيأ: أضف INSTAGRAM_WORKER_URL");
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
+    const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
       const response = await fetch(`${this.workerUrl}/profile`, {
         method: "POST",
@@ -73,7 +73,7 @@ export class InstaloaderProvider implements InstagramProvider {
       }
       return { profile: mapWorkerProfile(payload, username, this.name) };
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") throw new Error("انتهت مهلة الاتصال بمصدر Instagram");
+      if (error instanceof Error && error.name === "AbortError") throw new Error("لم يستجب مصدر Instagram خلال 10 ثوانٍ. حاول لاحقًا.");
       throw error;
     } finally {
       clearTimeout(timeout);
