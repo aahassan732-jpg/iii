@@ -123,104 +123,88 @@ var ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
 };
 
-// providers/instagram/InstaloaderProvider.ts
+// providers/instagram/InstagramProvider.ts
+function normalizeUsername(value) {
+  return value.trim().replace(/^@+/, "").toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 30);
+}
+function mapWorkerProfile(payload, username, source) {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const data = body.profile && typeof body.profile === "object" ? body.profile : body;
+  const numberValue = (value) => typeof value === "number" && Number.isFinite(value) ? value : null;
+  const booleanValue = (value) => typeof value === "boolean" ? value : null;
+  const stringValue = (value) => typeof value === "string" && value.length > 0 ? value : null;
+  return {
+    username: normalizeUsername(String(data.username ?? username)),
+    userId: stringValue(data.userId ?? data.userid ?? data.id),
+    displayName: stringValue(data.displayName ?? data.full_name ?? data.fullName),
+    biography: stringValue(data.biography ?? data.bio),
+    followers: numberValue(data.followers ?? data.followersCount),
+    following: numberValue(data.following ?? data.followingCount),
+    postCount: numberValue(data.postCount ?? data.posts_count ?? data.postsCount),
+    verified: booleanValue(data.verified),
+    isPrivate: booleanValue(data.isPrivate ?? data.private),
+    profilePictureUrl: stringValue(data.profilePictureUrl ?? data.profile_picture ?? data.profilePicUrl),
+    externalUrl: stringValue(data.externalUrl ?? data.external_url),
+    fetchedAt: /* @__PURE__ */ new Date(),
+    source
+  };
+}
 var InstaloaderProvider = class {
   name = "instaloader";
-  lastHealth = { status: "offline", checkedAt: /* @__PURE__ */ new Date() };
+  workerUrl = process.env.INSTAGRAM_WORKER_URL?.replace(/\/$/, "");
   async fetchProfile(username) {
-    const workerUrl = process.env.INSTAGRAM_WORKER_URL;
-    if (!workerUrl) {
-      const error = "INSTAGRAM_WORKER_URL is not configured";
-      this.lastHealth = { status: "offline", checkedAt: /* @__PURE__ */ new Date(), lastError: error };
-      throw new Error(error);
-    }
-    const started = Date.now();
+    if (!this.workerUrl) throw new Error("\u0645\u0635\u062F\u0631 Instagram \u063A\u064A\u0631 \u0645\u0647\u064A\u0623: \u0623\u0636\u0641 INSTAGRAM_WORKER_URL");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3e4);
     try {
-      const response = await fetch(`${workerUrl.replace(/\/$/, "")}/profile/${encodeURIComponent(username)}`, {
-        headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(25e3)
+      const response = await fetch(`${this.workerUrl}/profile`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ username: normalizeUsername(username) }),
+        signal: controller.signal
       });
-      const payload = await response.json();
-      if (!response.ok || payload.ok === false) {
-        const error = String(payload.error ?? `Instagram worker returned ${response.status}`);
-        this.lastHealth = { status: response.status === 429 ? "blocked" : "degraded", checkedAt: /* @__PURE__ */ new Date(), responseMs: Date.now() - started, lastError: error };
-        throw new Error(error);
+      const text2 = await response.text();
+      let payload = {};
+      try {
+        payload = text2 ? JSON.parse(text2) : {};
+      } catch {
       }
-      const profile = {
-        username: String(payload.username ?? username),
-        userId: payload.user_id ? String(payload.user_id) : null,
-        displayName: payload.full_name ? String(payload.full_name) : null,
-        biography: payload.biography ? String(payload.biography) : null,
-        followers: typeof payload.followers === "number" ? payload.followers : null,
-        following: typeof payload.following === "number" ? payload.following : null,
-        postCount: typeof payload.posts_count === "number" ? payload.posts_count : null,
-        verified: typeof payload.verified === "boolean" ? payload.verified : null,
-        isPrivate: typeof payload.private === "boolean" ? payload.private : null,
-        profilePictureUrl: payload.profile_picture_url ? String(payload.profile_picture_url) : null,
-        externalUrl: payload.external_url ? String(payload.external_url) : null,
-        fetchedAt: /* @__PURE__ */ new Date(),
-        source: this.name
-      };
-      this.lastHealth = { status: "healthy", checkedAt: /* @__PURE__ */ new Date(), responseMs: Date.now() - started };
-      return { profile, health: this.lastHealth };
+      if (!response.ok) {
+        const message = payload && typeof payload === "object" && "error" in payload ? String(payload.error) : `Instagram worker returned ${response.status}`;
+        throw new Error(message);
+      }
+      return { profile: mapWorkerProfile(payload, username, this.name) };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown provider error";
-      if (this.lastHealth.status === "healthy") this.lastHealth = { status: "degraded", checkedAt: /* @__PURE__ */ new Date(), responseMs: Date.now() - started, lastError: message };
+      if (error instanceof Error && error.name === "AbortError") throw new Error("\u0627\u0646\u062A\u0647\u062A \u0645\u0647\u0644\u0629 \u0627\u0644\u0627\u062A\u0635\u0627\u0644 \u0628\u0645\u0635\u062F\u0631 Instagram");
       throw error;
+    } finally {
+      clearTimeout(timeout);
     }
   }
   health() {
-    return this.lastHealth;
+    return { name: this.name, status: this.workerUrl ? "ready" : "not_configured", responseMs: null, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
   }
 };
-
-// providers/instagram/MockProvider.ts
 var MockProvider = class {
-  name = "mock-development";
-  lastHealth = { status: "healthy", checkedAt: /* @__PURE__ */ new Date(), responseMs: 40 };
+  name = "mock";
   async fetchProfile(username) {
-    if (process.env.NODE_ENV === "production") throw new Error("MockProvider is disabled in production");
-    const profile = {
-      username,
-      userId: `dev-${username}`,
-      displayName: "\u062D\u0633\u0627\u0628 \u062A\u062C\u0631\u064A\u0628\u064A \u0644\u0644\u062A\u0637\u0648\u064A\u0631",
-      biography: "\u0628\u064A\u0627\u0646\u0627\u062A \u062A\u062C\u0631\u064A\u0628\u064A\u0629 \u0645\u062D\u0635\u0648\u0631\u0629 \u0641\u064A \u0628\u064A\u0626\u0629 \u0627\u0644\u062A\u0637\u0648\u064A\u0631 \u0641\u0642\u0637",
-      followers: 12400,
-      following: 318,
-      postCount: 186,
-      verified: false,
-      isPrivate: false,
-      profilePictureUrl: null,
-      externalUrl: "https://example.com",
-      fetchedAt: /* @__PURE__ */ new Date(),
-      source: this.name
-    };
-    this.lastHealth = { status: "healthy", checkedAt: /* @__PURE__ */ new Date(), responseMs: 40 };
-    return { profile, health: this.lastHealth };
+    const normalized = normalizeUsername(username);
+    return { profile: { username: normalized, displayName: normalized, biography: "Mock profile (development only)", followers: 0, following: 0, postCount: 0, verified: false, isPrivate: false, profilePictureUrl: null, externalUrl: null, userId: null, fetchedAt: /* @__PURE__ */ new Date(), source: this.name } };
   }
   health() {
-    return this.lastHealth;
+    return { name: this.name, status: "ready", responseMs: 0, checkedAt: (/* @__PURE__ */ new Date()).toISOString() };
   }
 };
 
 // providers/instagram/ProviderManager.ts
 var ProviderManager = class {
-  provider;
+  active;
   constructor() {
-    const requested = process.env.INSTAGRAM_PROVIDER ?? "instaloader";
-    if (requested === "mock" && process.env.NODE_ENV !== "production") this.provider = new MockProvider();
-    else this.provider = new InstaloaderProvider();
-  }
-  get active() {
-    return this.provider;
+    const useMock = process.env.INSTAGRAM_PROVIDER === "mock" && process.env.NODE_ENV === "development";
+    this.active = useMock ? new MockProvider() : new InstaloaderProvider();
   }
 };
 var providerManager = new ProviderManager();
-
-// providers/instagram/InstagramProvider.ts
-function normalizeUsername(value) {
-  return value.trim().replace(/^@+/, "").toLowerCase().replace(/[^a-z0-9._]/g, "").slice(0, 30);
-}
 
 // server/db.ts
 var _db = null;
