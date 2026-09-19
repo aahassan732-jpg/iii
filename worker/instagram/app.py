@@ -22,6 +22,8 @@ if _session_id:
 _user_agent = os.getenv("INSTAGRAM_USER_AGENT", "").strip()
 if _user_agent:
     _loader.context._session.headers.update({"User-Agent": _user_agent})
+_loader.context.request_timeout = max(float(os.getenv("INSTAGRAM_REQUEST_TIMEOUT_SECONDS", "12")), 3.0)
+_loader.context.max_connection_attempts = 1
 
 _lock = Lock()
 _last_request_at = 0.0
