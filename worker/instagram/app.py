@@ -3,28 +3,18 @@ import time
 from threading import Lock
 from typing import Any
 
-import instaloader
+import requests
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
-_loader = instaloader.Instaloader(
-    download_pictures=False,
-    download_videos=False,
-    download_video_thumbnails=False,
-    download_geotags=False,
-    save_metadata=False,
-    compress_json=False,
-    quiet=True,
-)
+_session = requests.Session()
 _session_id = os.getenv("INSTAGRAM_SESSIONID", "").strip()
+_user_agent = os.getenv("INSTAGRAM_USER_AGENT", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36").strip()
+_session.headers.update({"User-Agent": _user_agent, "Accept": "*/*", "X-IG-App-ID": "936619743392459"})
 if _session_id:
-    _loader.context._session.cookies.set("sessionid", _session_id, domain=".instagram.com")
-_user_agent = os.getenv("INSTAGRAM_USER_AGENT", "").strip()
-if _user_agent:
-    _loader.context._session.headers.update({"User-Agent": _user_agent})
-_loader.context.request_timeout = max(float(os.getenv("INSTAGRAM_REQUEST_TIMEOUT_SECONDS", "12")), 3.0)
-_loader.context.max_connection_attempts = 1
+    _session.cookies.set("sessionid", _session_id, domain=".instagram.com")
 
+_request_timeout = max(float(os.getenv("INSTAGRAM_REQUEST_TIMEOUT_SECONDS", "12")), 3.0)
 _lock = Lock()
 _last_request_at = 0.0
 _min_interval = max(float(os.getenv("MIN_REQUEST_INTERVAL_SECONDS", "8")), 1.0)
@@ -32,25 +22,25 @@ _cache_ttl = max(int(os.getenv("PROFILE_CACHE_SECONDS", "300")), 30)
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
-def _profile_payload(profile: instaloader.Profile) -> dict[str, Any]:
+def _profile_payload(user: dict[str, Any]) -> dict[str, Any]:
     return {
-        "username": profile.username,
-        "userId": str(profile.userid),
-        "displayName": profile.full_name or None,
-        "biography": profile.biography or None,
-        "followers": profile.followers,
-        "following": profile.followees,
-        "postCount": profile.mediacount,
-        "verified": profile.is_verified,
-        "isPrivate": profile.is_private,
-        "profilePictureUrl": profile.profile_pic_url,
-        "externalUrl": profile.external_url or None,
+        "username": user.get("username"),
+        "userId": str(user.get("pk") or user.get("id")) if user.get("pk") or user.get("id") else None,
+        "displayName": user.get("full_name") or None,
+        "biography": user.get("biography") or None,
+        "followers": (user.get("edge_followed_by") or {}).get("count", user.get("follower_count")),
+        "following": (user.get("edge_follow") or {}).get("count", user.get("following_count")),
+        "postCount": (user.get("edge_owner_to_timeline_media") or {}).get("count", user.get("media_count")),
+        "verified": bool(user.get("is_verified")),
+        "isPrivate": bool(user.get("is_private")),
+        "profilePictureUrl": user.get("profile_pic_url_hd") or user.get("profile_pic_url") or None,
+        "externalUrl": user.get("external_url") or None,
     }
 
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ready", "provider": "instaloader", "sessionConfigured": bool(_session_id)})
+    return jsonify({"status": "ready", "provider": "instagram-http", "sessionConfigured": bool(_session_id)})
 
 
 @app.post("/profile")
@@ -72,19 +62,29 @@ def profile():
             return jsonify({"error": "مصدر Instagram يفرض مهلة بين الطلبات. حاول بعد قليل.", "retryAfterSeconds": round(wait)}), 429
         _last_request_at = time.time()
         try:
-            result = _profile_payload(instaloader.Profile.from_username(_loader.context, username))
+            response = _session.get(
+                "https://www.instagram.com/api/v1/users/web_profile_info/",
+                params={"username": username},
+                timeout=_request_timeout,
+            )
+            if response.status_code == 429:
+                return jsonify({"error": "مصدر Instagram فرض حدًا مؤقتًا على الطلبات. حاول لاحقًا.", "retryAfterSeconds": 60}), 429
+            if response.status_code == 404:
+                return jsonify({"error": "الحساب غير موجود"}), 404
+            response.raise_for_status()
+            payload = response.json()
+            user = ((payload.get("data") or {}).get("user") or {})
+            if not user:
+                return jsonify({"error": "لم يعثر المصدر على بيانات الحساب"}), 404
+            result = _profile_payload(user)
             _cache[username] = (time.time(), result)
             return jsonify({"profile": result, "cached": False})
-        except instaloader.exceptions.ProfileNotExistsException:
-            return jsonify({"error": "الحساب غير موجود"}), 404
-        except instaloader.exceptions.PrivateAccountException:
-            return jsonify({"error": "الحساب خاص ولا تتوفر بياناته العامة الكافية"}), 403
-        except Exception as exc:
-            message = str(exc)
-            if "429" in message or "Too Many Requests" in message or "Login required" in message:
-                return jsonify({"error": "مصدر Instagram فرض حدًا مؤقتًا على الطلبات. حاول لاحقًا.", "retryAfterSeconds": 60}), 429
-            app.logger.warning("Instagram provider error: %s", type(exc).__name__)
-            return jsonify({"error": "تعذر جلب بيانات الحساب من المصدر حاليًا"}), 502
+        except requests.Timeout:
+            return jsonify({"error": "انتهت مهلة الاتصال بمصدر Instagram. حاول لاحقًا."}), 504
+        except requests.RequestException:
+            return jsonify({"error": "تعذر الاتصال بمصدر Instagram حاليًا"}), 502
+        except ValueError:
+            return jsonify({"error": "أعاد المصدر استجابة غير متوقعة"}), 502
 
 
 if __name__ == "__main__":
